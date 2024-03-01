@@ -2,7 +2,7 @@
 clear;
 
 %%%param and init
-N = 5;  %预测步数
+N = 7;  %预测步数
 n = 3;  %状态维数
 p = 3;  %控制器维数
 A = rand(n,n);
@@ -15,13 +15,22 @@ M = zeros(n*(N+1),1);
 % R = ones(p,p)*5;
 % F = ones(n,n);
 Q = eye(n,n)*100; 
-R = eye(p,p)*0.0001;
+R = eye(p,p)*0.01;
 F = eye(n,n)*10;
 Q_bar = []; % n*(N+1) , n*(N+1)
 R_bar = []; % p*N , p*N
 
+%约束  aX≤b,这里主要是约束控制器大小
+a1 = eye(p,p);
+a2 = -1*eye(p,p);
+z = zeros((N-1)*p,(N-1)*p);
+a = [blkdiag(a1,z);blkdiag(a2,z)];  %a矩阵
 
-X = rand(n,1)*10000;
+u_bound = 50;   %约束控制器在多少的幅值内
+b = u_bound*ones(2*N*p,1);      %b矩阵
+
+
+X = rand(n,1)*50;   %初始化状态量
 % X = [9.45174113109401;2.08934922426023;7.09281702710545];
 X_1 = rand(n,1);
 U = zeros(p,1);
@@ -29,6 +38,7 @@ U = zeros(p,1);
 X_whole = [];
 yd_whole = [];
 e_whole = [];
+u_whole = [];
 
 X_0 = X;
 for i=1:1:N
@@ -64,20 +74,23 @@ end
 T = 10; 
 t_delta = 0.01;
 
+%开始循环
 for t=1:1:T/t_delta
 
 %     yd = 5;
     yd = [];
     ydd = [];
     for j=1:1:N+1
-        yd = [yd;sin((t+j-1)*0.01)*100;sin((t+j-1)*0.01)*100;sin((t+j-1)*0.01)*100];
+        yd = [yd;sin((t+j-1)*0.01)*100;sin((t+j-1)*0.01)*100;sin((t+j-1)*0.01)*100];    %ref
     end
+    
+    %保存ref用来画图
     ydd = [sin(t*0.01)*100;sin(t*0.01)*100;sin(t*0.01)*100];
     yd_whole(:,t) = ydd;
 
 %%%controller
-    U = MPC(X,yd,M,C,Q_bar,R_bar);
-    
+    U = MPC(X,yd,M,C,Q_bar,R_bar,a,b);
+    u_whole = [u_whole,U(1:p)];
 %%%system update
     X_1 = A*X+B*U(1:p);
     X = X_1;
@@ -88,30 +101,35 @@ end
 
 
 
-%%%paint
+%%%画图
 
 sequence = linspace(1, (T/t_delta), T/t_delta);
-% time_range = [0, t_whole];
-% mapped_time = (sequence - min(sequence)) / (max(sequence) - min(sequence)) * (time_range(2) - time_range(1)) + time_range(1);
 
-
-n_fol = 3;
-% figure(1);
+n_fol = p;
+%画出控制器轨迹
+figure(1);
 hold on;
 box on;
 % plot(sequence,yd_whole ,'LineWidth',2.6);
+legend('ref','NumColumns',1);
 for i=1:1:n_fol
-    e = reshape(e_whole(i,:),[],T/t_delta);
+    e = reshape(u_whole(i,:),[],T/t_delta);
     plot(sequence,e ,'LineWidth',1.3);
 end
 % title("e");
-% legend({'agent1','agent2','agent3'},'NumColumns',3);
-% % title("Number of Trigger");
-% set(gca,'FontSize',16,'FontName','Times New Roman');
-% % xlabel('t','FontSize',25);
-% % ylabel('error','FontSize',25);
-% txt = xlabel('Time(sec)','FontSize',25);
-% set(txt,'Interpreter','none');
-% txt = ylabel('$\mathcal{Z}_{2i}$','FontSize',25);
-% set(txt,'Interpreter','latex');
+legend({'ref','agent1','agent2','agent3'},'NumColumns',4);
+
+%画出期望轨迹和跟踪轨迹
+figure(2);
+hold on;
+box on;
+plot(sequence,yd_whole(1,:) ,'b','LineWidth',2.6);
+legend('ref','NumColumns',1);
+for i=1:1:n_fol
+    e = reshape(X_whole(i,:),[],T/t_delta);
+    plot(sequence,e ,'LineWidth',1.3);
+end
+% title("e");
+legend({'ref','agent1','agent2','agent3'},'NumColumns',4);
+
 
